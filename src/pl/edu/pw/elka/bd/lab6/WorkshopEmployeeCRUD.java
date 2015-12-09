@@ -9,7 +9,6 @@ import java.sql.Statement;
 import java.text.ParseException;
 import java.util.Scanner;
 
-import com.sun.corba.se.impl.orb.PrefixParserAction;
 import oracle.jdbc.pool.OracleDataSource;
 
 
@@ -18,7 +17,6 @@ import oracle.jdbc.pool.OracleDataSource;
  * lab 6
  * Workshop - Employee CRUD.
  *	
- * @author B.Twardowski <B.Twardowski@ii.pw.edu.pl>
  *
  */
 public class WorkshopEmployeeCRUD {
@@ -48,8 +46,7 @@ public class WorkshopEmployeeCRUD {
 	private void init() throws SQLException {
         pessimisticEnabled = false;
         ods = new OracleDataSource();
-        String password = getPassword();
-		ods.setURL(generateJDBC_URL(password));
+		ods.setURL(generateJDBC_URL(getPassword()));
 		conn = ods.getConnection();
 		DatabaseMetaData meta = conn.getMetaData();
 		System.out.println("Successfully connected to DB. JDBC driver version is " + meta.getDriverVersion());
@@ -64,51 +61,7 @@ public class WorkshopEmployeeCRUD {
 		conn.close();
 		System.out.println("Database connection successfully closed.");
 	}
-	
-	
-	/**
-	 * Showcase.
-	 * @throws SQLException
-	 */
-	public void doShowcase() throws SQLException {
-		init();
-	//	simpleTest();
-	//	preparedStatementShowcace();
-	//	transactionShowcace();
-		close();
-	}
-	
-	
-	/**
-	 * Simple select statement.
-	 * @throws SQLException
-	 */
-	private void simpleTest() throws SQLException {
-	   
-		System.out.println("Simple query statement test...");
-		
-	    // Create a statement
-	    Statement stmt = conn.createStatement();
 
-	    // Execute SQL
-	    ResultSet rset = stmt.executeQuery("select * FROM CUSTOMERS");
-
-	    System.out.println("Query result: ");
-	    
-	    int i = 1;
-	    while (rset.next()) {
-	       System.out.println("[" + i + "]:" + rset.getString(1));
-	       System.out.println("[" + i + "]:" + rset.getString(2));
-	       i++;
-	    }
-
-
-
-	    // close the result set, the statement and connect
-	    rset.close();
-	    stmt.close();
-	    
-	}
 
     private void readAllEmployees() throws SQLException {
         System.out.println("Reading all employees...");
@@ -117,17 +70,11 @@ public class WorkshopEmployeeCRUD {
         Statement stmt = conn.createStatement();
         ResultSet rset = stmt.executeQuery("select * FROM EMPLOYEE");
 
-        System.out.println("Query result: ");
-
-        String form = "%d. %20s %40s %20s %15s %8d\n";
+        System.out.println("Our fellow employees: ");
 
         System.out.format("%s %20s %40s %20s %15s %8s\n", "ID", "FIRST NAME", "LAST NAME", "POSITION", "EMP. DATE", "HR_RATE");
-        while (rset.next()) {
-            System.out.format(form,
-                    rset.getInt("EMPLOYEE_ID"), rset.getString("FNAME"),            rset.getString("LNAME"),
-                    rset.getString("POSITION"), rset.getDate("EMPLOYMENT_DATE"),    rset.getInt("HOUR_RATE"));
-
-        }
+        while (rset.next())
+            Toolbox.PrintEmployee(rset);
 
         // close the result set, the statement and connect
         rset.close();
@@ -135,28 +82,8 @@ public class WorkshopEmployeeCRUD {
 
     }
 
-    private int getLastID() throws Exception {
-        try {
-            PreparedStatement ps = conn.prepareStatement("select max(EMPLOYEE_ID) from EMPLOYEE");
-            ResultSet rs = ps.executeQuery();
-            if(rs.getFetchSize()==0)
-                return 0;
-            rs.next();
-            int retValue = rs.getInt(1);
-            rs.close();
-            ps.close();
-            return (1+retValue);
-
-        }
-        catch(SQLException se) {
-            throw new Exception("getLastE_ID failed\n"+se.getLocalizedMessage());
-        }
-    }
-
     private void createNewEmployee() throws Exception {
-        int employeeNr = getLastID();
-        System.out.println("Preparing new employee, nr " + employeeNr);
-        Employee newEmployee = new Employee(employeeNr, inputScanner);
+        Employee newEmployee = new Employee(Toolbox.getLastID(conn), inputScanner);
         PreparedStatement ps = newEmployee.makeStatement(conn);
 
         try {
@@ -167,44 +94,25 @@ public class WorkshopEmployeeCRUD {
             System.out.println("SQLException thrown - possibly someone stolen your EMPLOYEE_ID. Try again.");
             System.out.println(se.getLocalizedMessage());
         }
-
+        finally {
+            ps.close();
+        }
 
     }
-	
-	/**
-	 * Transaction showcase.
-	 * @throws SQLException
-	 */
-	private void transactionShowcace() throws SQLException {
-		
-		System.out.println("Transactions statement showcase...");
-		
-		//TODO: To fill...
-		
-		conn.setAutoCommit(false);
-		
-		//operations - selects/updates/inserts with user interactions
-		
-		//if something wrong 
-		//conn.rollback();
-		
-		//if no error
-		//conn.commit();
-
-	}
 
     private void updateEmployee() throws SQLException, ParseException {
-        int who, version;
+        int version;
         ResultSet ret;
-        System.out.print("Enter employee id to continue:");
-        who = inputScanner.nextInt();
-        PreparedStatement ps;
+        PreparedStatement ps, ps2;
+
         if(pessimisticEnabled)
             ps = conn.prepareStatement("SELECT * FROM EMPLOYEE WHERE EMPLOYEE_ID=:1 FOR UPDATE");
         else
             ps = conn.prepareStatement("SELECT * FROM EMPLOYEE WHERE EMPLOYEE_ID=:1");
 
-        ps.setInt(1, who);
+
+        System.out.print("Enter employee id to continue:");
+        ps.setInt(1, inputScanner.nextInt());
 
         try {
             ret = ps.executeQuery();
@@ -212,7 +120,7 @@ public class WorkshopEmployeeCRUD {
         }
         catch(SQLException se)
         {
-            System.out.println(se.getLocalizedMessage());
+            System.out.println(se.getMessage());
             return;
         }
         catch(IllegalArgumentException ile)
@@ -220,14 +128,16 @@ public class WorkshopEmployeeCRUD {
             System.out.println(ile.getMessage());
             return;
         }
-        System.out.println("OK - employee found!");
-        version = ret.getInt("VERSION");
 
-        Employee upEmp = new Employee(ret, inputScanner);
+        System.out.println("OK - employee found!");
+
         try {
-			PreparedStatement ps2 = upEmp.updateStatement(conn, version);
-			int updated = ps2.executeUpdate();
-            if(updated==0) throw new IllegalArgumentException("Someone edited that employee before you - try again.");
+            version = ret.getInt("VERSION");
+            Employee upEmp = new Employee(ret, inputScanner);
+
+            ps2 = upEmp.updateStatement(conn, version);
+            if(ps2.executeUpdate()==0)
+                throw new IllegalArgumentException("Someone edited that employee before you - try again.");
 		}
         catch(SQLException se) {
             System.out.println("Can't update record:\n" + se.getLocalizedMessage());
@@ -239,16 +149,20 @@ public class WorkshopEmployeeCRUD {
         }
 
         System.out.println("Record updated!");
-    }
-    void deleteEmployee() throws SQLException
-    {
-        int id;
-        readAllEmployees();
-        System.out.print("Which employee do you want to delete:");
-        id = inputScanner.nextInt();
 
+        ret.close();
+        ps.close();
+        ps2.close();
+    }
+
+
+    void deleteEmployee() throws SQLException {
         PreparedStatement ps = conn.prepareStatement("delete from EMPLOYEE where EMPLOYEE_ID=:1");
-        ps.setInt(1, id);
+        readAllEmployees();
+
+        System.out.print("Which employee do you want to delete:");
+        ps.setInt(1, inputScanner.nextInt());
+
         try {
             int affected = ps.executeUpdate();
             if(affected==0)
@@ -264,30 +178,29 @@ public class WorkshopEmployeeCRUD {
         try {
             Repairs repairs = new Repairs(conn);
             boolean good = true;
-            int repairid, employeeid, hours;
             PreparedStatement ps = conn.prepareStatement("INSERT INTO EMPLOYEE_REPAIRS VALUES (:1, :2, :3)");
 
             while(good) {
                 repairs.Print();
                 System.out.print("Select repair id:");
-                repairid = inputScanner.nextInt();
+                ps.setInt(1, inputScanner.nextInt());
+
                 readAllEmployees();
                 System.out.print("Select employee id:");
-                employeeid = inputScanner.nextInt();
-                System.out.print("Enter how much employee spent on that repair(in hours):");
-                hours = inputScanner.nextInt();
+                ps.setInt(2, inputScanner.nextInt());
 
-                ps.setInt(1, repairid);
-                ps.setInt(2, employeeid);
-                ps.setInt(3, hours);
+                System.out.print("Enter how much employee spent on that repair(in hours):");
+                ps.setInt(3, inputScanner.nextInt());
+
                 ps.executeQuery();
+
                 System.out.print("Do you want to continue(y/n):");
                 good = inputScanner.next(".").charAt(0) == 'y';
             }
 
 
             conn.commit();
-            System.out.println("Commited!");
+            System.out.println("Committed!");
         }
         catch (Exception e)
         {
