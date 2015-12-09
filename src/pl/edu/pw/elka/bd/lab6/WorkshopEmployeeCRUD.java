@@ -28,7 +28,7 @@ public class WorkshopEmployeeCRUD {
 	private OracleDataSource ods;
 	private Connection conn;
 	private Scanner inputScanner = new Scanner(System.in);
-
+    private boolean pessimisticEnabled;
 
     private String getPassword() {
         System.out.print("User password:");
@@ -46,7 +46,8 @@ public class WorkshopEmployeeCRUD {
 	 * @throws SQLException
 	 */
 	private void init() throws SQLException {
-		ods = new OracleDataSource();
+        pessimisticEnabled = false;
+        ods = new OracleDataSource();
         String password = getPassword();
 		ods.setURL(generateJDBC_URL(password));
 		conn = ods.getConnection();
@@ -169,37 +170,6 @@ public class WorkshopEmployeeCRUD {
 
 
     }
-
-	/**
-	 * Prepared statement showcase.
-	 * @throws SQLException
-	 */
-	private void preparedStatementShowcace() throws SQLException {
-		
-		System.out.println("Prepared statement showcase...");
-		
-		//TODO: To modify!!!
-		
-		PreparedStatement preparedStatement = conn.prepareStatement("select * FROM CUSTOMERS");
-		//get params from console
-		System.out.println("Type employee name :" );
-		preparedStatement.setString(1, inputScanner.nextLine() );
-		
-		ResultSet rs = preparedStatement.executeQuery();
-		
-	    int i = 1;
-	    while (rs.next()) {
-	       System.out.println("[" + i + "]:" + rs.getString(1));
-	       i++;
-	    }
-	    
-	    // close the result set, the statement and connect
-	    rs.close();
-	    preparedStatement.close();
-		
-	}
-
-	
 	
 	/**
 	 * Transaction showcase.
@@ -228,8 +198,12 @@ public class WorkshopEmployeeCRUD {
         ResultSet ret;
         System.out.print("Enter employee id to continue:");
         who = inputScanner.nextInt();
+        PreparedStatement ps;
+        if(pessimisticEnabled)
+            ps = conn.prepareStatement("SELECT * FROM EMPLOYEE WHERE EMPLOYEE_ID=:1 FOR UPDATE");
+        else
+            ps = conn.prepareStatement("SELECT * FROM EMPLOYEE WHERE EMPLOYEE_ID=:1");
 
-        PreparedStatement ps = conn.prepareStatement("SELECT * FROM EMPLOYEE WHERE EMPLOYEE_ID=:1");
         ps.setInt(1, who);
 
         try {
@@ -266,7 +240,72 @@ public class WorkshopEmployeeCRUD {
 
         System.out.println("Record updated!");
     }
+    void deleteEmployee() throws SQLException
+    {
+        int id;
+        readAllEmployees();
+        System.out.print("Which employee do you want to delete:");
+        id = inputScanner.nextInt();
 
+        PreparedStatement ps = conn.prepareStatement("delete from EMPLOYEE where EMPLOYEE_ID=:1");
+        ps.setInt(1, id);
+        try {
+            int affected = ps.executeUpdate();
+            if(affected==0)
+                throw new IllegalArgumentException("Statement didn't run - try bad id?");
+        }
+        catch(Exception e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    void assignEmployees() throws SQLException {
+        conn.setAutoCommit(false);
+        try {
+            Repairs repairs = new Repairs(conn);
+            boolean good = true;
+            int repairid, employeeid, hours;
+            PreparedStatement ps = conn.prepareStatement("INSERT INTO EMPLOYEE_REPAIRS VALUES (:1, :2, :3)");
+
+            while(good) {
+                repairs.Print();
+                System.out.print("Select repair id:");
+                repairid = inputScanner.nextInt();
+                readAllEmployees();
+                System.out.print("Select employee id:");
+                employeeid = inputScanner.nextInt();
+                System.out.print("Enter how much employee spent on that repair(in hours):");
+                hours = inputScanner.nextInt();
+
+                ps.setInt(1, repairid);
+                ps.setInt(2, employeeid);
+                ps.setInt(3, hours);
+                ps.executeQuery();
+                System.out.print("Do you want to continue(y/n):");
+                good = inputScanner.next(".").charAt(0) == 'y';
+            }
+
+
+            conn.commit();
+            System.out.println("Commited!");
+        }
+        catch (Exception e)
+        {
+            System.out.println(e.getMessage());
+            e.printStackTrace();
+            System.out.println("Doing a rollback...");
+            conn.rollback();
+        }
+        finally
+        {
+            conn.setAutoCommit(true);
+        }
+    }
+
+    void togglePessimistic() {
+        pessimisticEnabled = !pessimisticEnabled;
+        System.out.println("Pessismistic locking switched. Now: " + pessimisticEnabled);
+    }
 	/**
 	 * Shows a menu.
 	 * 
@@ -280,7 +319,8 @@ public class WorkshopEmployeeCRUD {
 							"\t (r) Read all employees\n"  +
 							"\t (u) Update an employee\n"  +	
 							"\t (d) Delete an employee\n"  +
-							"\t (t) Connect an employee with repair\n" +
+							"\t (t) Assign employees with repairs\n" +
+                            "\t (p) Toggle pessimistic locking on employee table\n" +
 							"\t (e) Exit\n");
 		System.out.println("Selected option(c,r,u,d,t,e):");
 		userResponse = inputScanner.next(".").charAt(0);
@@ -298,10 +338,13 @@ public class WorkshopEmployeeCRUD {
                 updateEmployee();
                 break;
             case 'd':
-                System.out.println("ddd");
+                deleteEmployee();
                 break;
             case 't':
-                System.out.println("ttt");
+                assignEmployees();
+                break;
+            case 'p':
+                togglePessimistic();
                 break;
             case 'e':
                 return 0;
@@ -318,7 +361,8 @@ public class WorkshopEmployeeCRUD {
         }
         catch(Exception e) {
             System.out.println("General exception thrown!");
-            System.out.println(e.getLocalizedMessage());
+            System.out.println(e.getMessage());
+            e.printStackTrace();
             return 1;
         }
 		return 1;

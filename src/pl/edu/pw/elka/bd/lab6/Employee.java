@@ -22,6 +22,17 @@ public class Employee {
 
     Scanner inputScanner;
     boolean updateMode;
+
+    public static String skipEmptyLines(Scanner fileIn) {
+        String line = "";
+        while (fileIn.hasNext()) {
+            if (!(line = fileIn.nextLine()).isEmpty()) {
+                return line;
+            }
+        }
+        return null;
+    }
+
     Employee(int id, Scanner s) throws ParseException
     {
         EMPLOYEE_ID = id;
@@ -48,19 +59,14 @@ public class Employee {
                 rs.getInt("EMPLOYEE_ID"), rs.getString("FNAME"),            rs.getString("LNAME"),
                 rs.getString("POSITION"), rs.getDate("EMPLOYMENT_DATE"),    rs.getInt("HOUR_RATE"));
 
-        System.out.println("If you want to skip something, press enter");
+        System.out.println("If you don't want to edit something, you have to reenter it.");
         interactWithUser();
 
     }
     private String readString(String msg, String oldvalue)
     {
-        String input;
         System.out.print(msg);
-        input = inputScanner.next();
-            if (!updateMode || !input.isEmpty()) //if(!updateMode || (updateMode && !input.isEmpty()))
-                return input;
-            else
-                return oldvalue;
+        return inputScanner.next();
 
     }
     private void interactWithUser() throws ParseException
