@@ -9,9 +9,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Scanner;
 
-/**
- * Created by erxyi on 08.12.2015.
- */
+
 public class Employee {
     int EMPLOYEE_ID;
     String FNAME;
@@ -24,7 +22,7 @@ public class Employee {
     boolean updateMode;
 
     public static String skipEmptyLines(Scanner fileIn) {
-        String line = "";
+        String line;
         while (fileIn.hasNext()) {
             if (!(line = fileIn.nextLine()).isEmpty()) {
                 return line;
@@ -55,41 +53,30 @@ public class Employee {
         HOUR_RATE = rs.getInt("HOUR_RATE");
 
         System.out.println("Actual data:");
-        System.out.format("%d. %20s %40s %20s %15s %8d\n",
-                rs.getInt("EMPLOYEE_ID"), rs.getString("FNAME"),            rs.getString("LNAME"),
-                rs.getString("POSITION"), rs.getDate("EMPLOYMENT_DATE"),    rs.getInt("HOUR_RATE"));
+        Toolbox.PrintEmployee(this);
 
         System.out.println("If you don't want to edit something, you have to reenter it.");
         interactWithUser();
 
     }
-    private String readString(String msg, String oldvalue)
+    private String readString(String msg)
     {
         System.out.print(msg);
         return inputScanner.next();
-
     }
     private void interactWithUser() throws ParseException
     {
         DateFormat df = new SimpleDateFormat("yyyy/MM/dd");
-        String input;
-        java.sql.Date temp;
-        int tempval;
 
-        FNAME = readString("First name:", FNAME);
-        LNAME = readString("Last name:", LNAME);
-        POSITION = readString("Position:", POSITION);
+        FNAME = readString("First name:");
+        LNAME = readString("Last name:");
+        POSITION = readString("Position:");
 
         System.out.print("Employment date(yyyy/MM/dd):");
-        input = inputScanner.next();
-        temp = new java.sql.Date(df.parse(input).getTime());
-        if (!updateMode || !input.isEmpty())
-            EMPLOYMENT_DATE = temp;
+        EMPLOYMENT_DATE = new java.sql.Date(df.parse(inputScanner.next()).getTime());
 
-        System.out.print("Hour rate(-1 don't update while editing):");
-        tempval = inputScanner.nextInt();
-        if (!updateMode || tempval!=-1)
-            HOUR_RATE = tempval;
+        System.out.print("Hour rate:");
+        HOUR_RATE = inputScanner.nextInt();
     }
 
 
